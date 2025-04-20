@@ -2,7 +2,6 @@ import google.generativeai as genai
 from flask import Flask, request, jsonify
 import requests
 import os
-import fitz
 import logging
 
 # Set up logging
@@ -14,7 +13,7 @@ genai.configure(api_key=os.environ.get("GEN_API"))
 phone_id = os.environ.get("PHONE_ID")
 phone = os.environ.get("PHONE_NUMBER")
 name = "Zuhaib The CEO of SEOPIXELPERFECT"  # The bot will consider this person as its owner or creator
-bot_name = "PIXEL PERFECT BOT"  # This will be the name of your bot, eg: "Hello I am Astro Bot"
+bot_name = "PIXEL PERFECT BOT"  # This will be the name of your bot, e.g., "Hello I am Astro Bot"
 model_name = "gemini-1.5-flash-latest"  # Switch to "gemini-1.0-pro" or any free model, if "gemini-1.5-flash" becomes paid in future.
 
 app = Flask(__name__)
@@ -164,6 +163,8 @@ def process_media_message(message, media_type):
             # Upload media file to Google Gemini and process it
             with open(filename, "wb") as temp_media:
                 temp_media.write(media_download_response.content)
+
+            # Adjust this based on actual Gemini API for uploading and processing files
             file = genai.upload_file(path=filename, display_name="tempfile")
             response = model.generate_content([f"What is this {media_type}", file])
             answer = response._result.candidates[0].content.parts[0].text
