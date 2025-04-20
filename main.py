@@ -79,7 +79,7 @@ def remove(*file_paths):
 # Root route
 @app.route("/", methods=["GET", "POST"])
 def index():
-    return "Bot is running!"
+    return "Bot is running! oh yeah"
 
 # Webhook route
 @app.route("/webhook", methods=["GET", "POST"])
