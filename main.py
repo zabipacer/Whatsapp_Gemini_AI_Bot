@@ -42,6 +42,12 @@ convo.send_message(
 
 app = Flask(__name__)
 
+# ——— Root status route ———
+@app.route("/", methods=["GET"])
+def index():
+    logging.debug("GET / -> status OK")
+    return "Bot is running!", 200
+
 # ——— Helper: send a WhatsApp text message ———
 def send_whatsapp(text: str):
     url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
@@ -82,9 +88,8 @@ def verify():
     if mode == "subscribe" and token == "BOT":
         logging.info("✔ Webhook verification successful")
         return chal, 200
-    else:
-        logging.warning("✖ Webhook verification failed")
-        return "Forbidden", 403
+    logging.warning("✖ Webhook verification failed")
+    return "Forbidden", 403
 
 # ——— Incoming messages ———
 @app.route("/webhook", methods=["POST"])
@@ -105,14 +110,11 @@ def webhook():
                 user_text = msg["text"]["body"]
                 logging.info(f"User says: {user_text}")
 
-                # Send to Gemini
                 convo.send_message(user_text)
                 reply = convo.last.text
                 logging.info(f"Gemini replies: {reply}")
 
-                # Send back via WhatsApp
                 send_whatsapp(reply)
-
             else:
                 logging.info(f"Unsupported type: {msg_type}")
                 send_whatsapp("Sorry, I only handle text messages right now.")
