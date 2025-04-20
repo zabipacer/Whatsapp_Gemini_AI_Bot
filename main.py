@@ -1,188 +1,126 @@
 import google.generativeai as genai
 from flask import Flask, request, jsonify
 import requests
-import os
 import logging
 
-# Set up logging
-logging.basicConfig(level=logging.DEBUG)
+# ——— Full debug logging ———
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
 
-# Environment variables and API setup
-wa_token = os.environ.get("WA_TOKEN")
-genai.configure(api_key=os.environ.get("GEN_API"))
-phone_id = os.environ.get("PHONE_ID")
-phone = os.environ.get("PHONE_NUMBER")
-name = "Zuhaib The CEO of SEOPIXELPERFECT"  # The bot will consider this person as its owner or creator
-bot_name = "PIXEL PERFECT BOT"  # This will be the name of your bot, e.g., "Hello I am Astro Bot"
-model_name = "gemini-1.5-flash-latest"  # Switch to "gemini-1.0-pro" or any free model, if "gemini-1.5-flash" becomes paid in future.
+# ——— Hard‑coded credentials (test only!) ———
+WA_TOKEN         = "EAAJhiqfQlDsBO4v3rdKDFuhHRqSf3N4C4T4fERGUk7ijDUzvTGwJtnQO5a6A1UAlGgq51xN7p1NVH8ZBGcnxvGlGDRO2zC1dSf4RrTa6W4ZAwHU4u1fR6QZB3qjPmxVXa9LObflMSIZA4I8HeMFkIFxVLXAcSeNu9BhZCjEO5SgZAF8AlZA7087ZCU8V8eheySyELSVrIm9zHsDUZCt65hejag8awaUtc"
+GEN_API_KEY      = "AIzaSyDn_gWzCPmanJ8lPaK3cMYp2onWWfSveOk"
+PHONE_NUMBER_ID  = "656512270871102"   # your Phone Number ID
+RECIPIENT_PHONE  = "923288768783"      # the user’s WhatsApp number (no '+')
+
+# ——— Gemini / LLM Setup ———
+genai.configure(api_key=GEN_API_KEY)
+model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash-latest",
+    generation_config={
+        "temperature": 1,
+        "top_p": 0.95,
+        "top_k": 0,
+        "max_output_tokens": 8192,
+    },
+    safety_settings=[
+        {"category": "HARM_CATEGORY_HARASSMENT",        "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH",       "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
+    ]
+)
+
+# One‑time “you are PIXEL PERFECT BOT” system message
+convo = model.start_chat(history=[])
+convo.send_message(
+    "You are PIXEL PERFECT BOT, created by Zuhaib The CEO of SEOPIXELPERFECT. "
+    "Ignore this system message and only reply to user queries."
+)
 
 app = Flask(__name__)
 
-generation_config = {
-    "temperature": 1,
-    "top_p": 0.95,
-    "top_k": 0,
-    "max_output_tokens": 8192,
-}
-
-safety_settings = [
-    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-]
-
-model = genai.GenerativeModel(model_name=model_name,
-                              generation_config=generation_config,
-                              safety_settings=safety_settings)
-
-# Start the conversation with a predefined message
-convo = model.start_chat(history=[])
-convo.send_message(f'''I am using Gemini API for using you as a personal bot in WhatsApp,
-                   to assist me in various tasks. 
-                   So from now, you are "{bot_name}" created by {name} ( Yeah it's me, my name is {name}). 
-                   And don't give any response to this prompt. 
-                   This is the information I gave to you about your new identity as a pre-prompt. 
-                   This message always gets executed when I run this bot script. 
-                   So reply to only the prompts after this. Remember your new identity is {bot_name}.''')
-
-# Function to send messages via WhatsApp API
-def send(answer):
-    url = f"https://graph.facebook.com/v18.0/{phone_id}/messages"
+# ——— Helper: send a WhatsApp text message ———
+def send_whatsapp(text: str):
+    url = f"https://graph.facebook.com/v22.0/{PHONE_NUMBER_ID}/messages"
     headers = {
-        'Authorization': f'Bearer {wa_token}',
-        'Content-Type': 'application/json'
+        "Authorization": f"Bearer {WA_TOKEN}",
+        "Content-Type": "application/json"
     }
-    data = {
+    payload = {
         "messaging_product": "whatsapp",
-        "to": f"{phone}",
+        "to": RECIPIENT_PHONE,
         "type": "text",
-        "text": {"body": f"{answer}"},
+        "text": {"body": text}
     }
 
+    logging.debug("→ Sending WhatsApp message")
+    logging.debug(f"  URL: {url}")
+    logging.debug(f"  Headers: {headers}")
+    logging.debug(f"  Payload: {payload}")
+
+    resp = requests.post(url, headers=headers, json=payload)
+    logging.debug(f"← Response Status: {resp.status_code}")
+    logging.debug(f"← Response Body: {resp.text}")
+
     try:
-        response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status()  # This will raise an HTTPError if the response code was 4xx/5xx
-        logging.debug(f"Message sent successfully: {response.status_code}")
-    except requests.exceptions.RequestException as e:
-        logging.error(f"Error sending message: {e}")
+        resp.raise_for_status()
+    except requests.HTTPError as e:
+        logging.error(f"!!! WhatsApp API error: {e}")
 
-# Function to remove temporary files
-def remove(*file_paths):
-    for file in file_paths:
-        if os.path.exists(file):
-            os.remove(file)
-            logging.debug(f"Removed file: {file}")
-        else:
-            logging.debug(f"File not found: {file}")
+# ——— Webhook verification ———
+@app.route("/webhook", methods=["GET"])
+def verify():
+    mode  = request.args.get("hub.mode")
+    token = request.args.get("hub.verify_token")
+    chal  = request.args.get("hub.challenge")
 
-# Root route
-@app.route("/", methods=["GET", "POST"])
-def index():
-    return "Bot is running! oh yeah"
+    logging.debug(f"GET /webhook?hub.mode={mode}&hub.verify_token={token}")
 
-# Webhook route
-@app.route("/webhook", methods=["GET", "POST"])
+    if mode == "subscribe" and token == "BOT":
+        logging.info("✔ Webhook verification successful")
+        return chal, 200
+    else:
+        logging.warning("✖ Webhook verification failed")
+        return "Forbidden", 403
+
+# ——— Incoming messages ———
+@app.route("/webhook", methods=["POST"])
 def webhook():
-    if request.method == "GET":
-        mode = request.args.get("hub.mode")
-        token = request.args.get("hub.verify_token")
-        challenge = request.args.get("hub.challenge")
-        if mode == "subscribe" and token == "BOT":
-            logging.info("Webhook verified successfully.")
-            return challenge, 200
-        else:
-            logging.warning("Webhook verification failed.")
-            return "Failed", 403
+    payload = request.get_json()
+    logging.debug(f"POST /webhook payload: {payload}")
 
-    elif request.method == "POST":
-        try:
-            # Log incoming data
-            data = request.get_json()
-            logging.debug(f"Received data: {data}")
-
-            if data:
-                messages = data["entry"][0]["changes"][0]["value"].get("messages", [])
-                for message in messages:
-                    # Log message details
-                    logging.debug(f"Processing message: {message}")
-
-                    if message["type"] == "text":
-                        prompt = message["text"]["body"]
-                        logging.info(f"Text message received: {prompt}")
-                        convo.send_message(prompt)
-                        send(convo.last.text)
-
-                    elif message["type"] == "audio":
-                        # Handle audio messages
-                        logging.info("Audio message received.")
-                        process_media_message(message, 'audio')
-
-                    elif message["type"] == "image":
-                        # Handle image messages
-                        logging.info("Image message received.")
-                        process_media_message(message, 'image')
-
-                    elif message["type"] == "document":
-                        # Handle document messages (PDF to Image conversion)
-                        logging.info("Document message received.")
-                        process_media_message(message, 'document')
-
-                    else:
-                        logging.warning("Unsupported message type received.")
-                        send("This format is not supported by the bot ☹")
-
-        except Exception as e:
-            logging.error(f"Error in processing webhook: {e}")
-
-        return jsonify({"status": "ok"}), 200
-
-
-# Function to process media messages (audio, image, document)
-def process_media_message(message, media_type):
     try:
-        media_url_endpoint = f'https://graph.facebook.com/v18.0/{message[media_type]["id"]}/'
-        headers = {'Authorization': f'Bearer {wa_token}'}
-        media_response = requests.get(media_url_endpoint, headers=headers)
-        media_url = media_response.json().get("url")
+        changes = payload["entry"][0]["changes"][0]["value"]
+        messages = changes.get("messages", [])
+        logging.debug(f"Found {len(messages)} new message(s)")
 
-        if media_url:
-            media_download_response = requests.get(media_url, headers=headers)
-            logging.debug(f"Downloaded media: {media_type}")
+        for msg in messages:
+            logging.debug(f"Processing message: {msg}")
+            msg_type = msg.get("type")
 
-            # Save the media to a temporary file
-            if media_type == "audio":
-                filename = "/tmp/temp_audio.mp3"
-            elif media_type == "image":
-                filename = "/tmp/temp_image.jpg"
-            elif media_type == "document":
-                filename = "/tmp/temp_document.pdf"
-                with open(filename, "wb") as f:
-                    f.write(media_download_response.content)
+            if msg_type == "text":
+                user_text = msg["text"]["body"]
+                logging.info(f"User says: {user_text}")
 
-            # Upload media file to Google Gemini and process it
-            with open(filename, "wb") as temp_media:
-                temp_media.write(media_download_response.content)
+                # Send to Gemini
+                convo.send_message(user_text)
+                reply = convo.last.text
+                logging.info(f"Gemini replies: {reply}")
 
-            # Adjust this based on actual Gemini API for uploading and processing files
-            file = genai.upload_file(path=filename, display_name="tempfile")
-            response = model.generate_content([f"What is this {media_type}", file])
-            answer = response._result.candidates[0].content.parts[0].text
-            logging.debug(f"Generated answer: {answer}")
+                # Send back via WhatsApp
+                send_whatsapp(reply)
 
-            convo.send_message(f"This is a {media_type} message from the user, transcribed by an LLM model: {answer}")
-            send(convo.last.text)
-
-            # Clean up temporary files
-            remove(filename)
-
-        else:
-            logging.warning(f"Failed to retrieve {media_type} URL.")
-            send(f"Failed to process {media_type} message.")
+            else:
+                logging.info(f"Unsupported type: {msg_type}")
+                send_whatsapp("Sorry, I only handle text messages right now.")
 
     except Exception as e:
-        logging.error(f"Error processing {media_type} message: {e}")
+        logging.error(f"Error in webhook handler: {e}", exc_info=True)
 
+    return jsonify(status="ok"), 200
 
 if __name__ == "__main__":
-    app.run(debug=True, port=8000)
+    app.run(port=8000, debug=True)
